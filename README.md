@@ -18,6 +18,9 @@ cd native
 ```
 
 Change the dataset path for your machine. `--help` lists the remaining options.
+The launcher validates batch shape against kernel residency before allocating. If a
+batch cannot evenly fill all resident GPU blocks, it exits immediately and suggests
+the nearest larger `--batch` value that can.
 `build.ps1` caches unchanged modules; depth/context/LR changes need no rebuild.
 Use `-Rebuild -Run -TrainingArgs @('--data', 'R:\Datasets\hn1g.txt', '--tokens',
 '1500000000', '--eval-every', '7325')` to time a full build and run together.

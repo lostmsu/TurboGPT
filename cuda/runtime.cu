@@ -44,6 +44,22 @@ static void check(cudaError_t e) {
     if (e != cudaSuccess)
         throw std::runtime_error(cudaGetErrorString(e));
 }
+static int tile_count(const Config &config) {
+    int64_t tokens = int64_t(config.batch) * config.context;
+    return int((tokens + TileTokens - 1) / TileTokens);
+}
+static void require_balanced_tiles(const Config &config, int tiles, int teams,
+                                   const char *team_name) {
+    if (tiles % teams == 0)
+        return;
+    int64_t balanced_tiles = (int64_t(tiles) + teams - 1) / teams * teams;
+    int suggested_batch = int(balanced_tiles * TileTokens / config.context);
+    throw std::runtime_error(
+        "Batch " + std::to_string(config.batch) + " x ctx" + std::to_string(config.context) +
+        " creates " + std::to_string(tiles) + " token tiles, which cannot evenly fill " +
+        std::to_string(teams) + " resident " + team_name + ". Increase --batch to " +
+        std::to_string(suggested_batch) + " for optimal occupancy.");
+}
 TG_API const char *tg_error() {
     return last_error.c_str();
 }
@@ -114,11 +130,12 @@ TG_API Engine *tg_create(const Config *c) {
         check(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&active, e->kernel, BlockThreads,
                                                             e->shared));
         int limit = active * prop.multiProcessorCount;
-        int tiles = (c->batch * c->context + TileTokens - 1) / TileTokens;
-        // Balanced work avoids a long final wave with only a few active blocks.
+        int tiles = tile_count(*c);
+        if (limit < 1)
+            throw std::runtime_error("Kernel has no cooperative residency on this device");
         int balanced = std::min(limit, tiles);
-        while (tiles % balanced)
-            --balanced;
+        if (c->inflight == 1)
+            require_balanced_tiles(*c, tiles, balanced, "blocks");
         e->d.blocks = c->blocks ? c->blocks : balanced;
         if (e->d.blocks < 1 || e->d.blocks > limit)
             throw std::runtime_error("Requested block count exceeds cooperative residency limit");
@@ -132,11 +149,11 @@ TG_API Engine *tg_create(const Config *c) {
                                                                 BlockThreads, e->shared));
             limit = active * prop.multiProcessorCount;
             e->d.optimizer_blocks = c->muon ? c->depth * 5 : 16;
-            int workers = std::min(tiles, (limit - e->d.optimizer_blocks) / c->inflight);
+            int resident_workers = (limit - e->d.optimizer_blocks) / c->inflight;
+            int workers = std::min(tiles, resident_workers);
             if (workers < 1)
                 throw std::runtime_error("inflight exceeds cooperative residency; reduce it");
-            while (tiles % workers)
-                --workers;
+            require_balanced_tiles(*c, tiles, workers, "worker teams");
             e->d.worker_blocks = workers;
             e->pipeline_blocks = workers * c->inflight + e->d.optimizer_blocks;
             allocation_blocks = std::max(allocation_blocks, e->pipeline_blocks);
