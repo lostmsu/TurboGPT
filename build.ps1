@@ -193,7 +193,10 @@ try {
         }
     }
     if ($changed -or -not (Test-Path -LiteralPath $exe)) {
-        Invoke-Compiler 'exe_link_seconds' $nvcc (@('-Xcompiler', '/MT') + $objects + @('-o', $exe))
+        # Only the DLL needs turbogpt.lib; the exe writing it too races a virus scan of the
+        # fresh file and the DLL link then fails with LNK1114.
+        Invoke-Compiler 'exe_link_seconds' $nvcc (@('-Xcompiler', '/MT', '-Xlinker', '/NOIMPLIB,/NOEXP') +
+            $objects + @('-o', $exe))
     }
     # The DLL exposes the same GPU code to the oracle.
     if ($cudaChanged -or -not (Test-Path -LiteralPath $dll)) {
