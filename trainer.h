@@ -1,16 +1,16 @@
 #pragma once
+#include "experiment.h"
 #include "runtime.h"
 #include "utils.h"
 #include <string>
 
 struct TrainingConfig {
-    Config model;
-    OneCycle onecycle;
-    std::string schedule = "onecycle";
-    std::string data, output, save, load;
-    int64_t tokens = 100000000;
-    int steps = 0, eval_every = 1000, eval_batches = 64, final_batches = 256, chunk = 1024;
-    float final_lr = 1.f;
+    Config model = experiment_model();
+    OneCycle onecycle = experiment_onecycle();
+    std::string data, output, save, load, log_to = experiment_run_directory;
+    bool logs_enabled = true;
+    int64_t tokens = experiment_tokens;
+    int chunk = experiment_chunk;
 };
 
 void train(TrainingConfig options, Clock::time_point process_start);

@@ -57,15 +57,14 @@ struct DeviceState {
     bf16 *weight_high;
     uint16_t *weight_low;
     float *momentum, *variance, *partial_gradients, *gradient, *gradient_norms, *token_losses;
+    float *loss_history;
     uint8_t *data;
     int64_t size;
-    const int64_t *endpoints;
     const uint8_t *input, *target;
     float *logits;
     LayerActivations *saved;
     bf16 *mlp_cache;
     StepRates *schedule;
-    int cycle_momentum;
     int blocks;
     int rank, norm_blocks, worker_blocks, optimizer_blocks;
     PipelineState *pipeline;
@@ -73,7 +72,6 @@ struct DeviceState {
     uint16_t *low_versions;
     int *version_trace;
     uint64_t step;
-    float lr_multiplier;
 };
 
 // Negative rank selects the physical block for ordinary synchronous launches.

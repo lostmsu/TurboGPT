@@ -52,28 +52,35 @@ def check_model(depth, context, batch=16, blocks=0):
         engine.close()
 
 
-def check_optimizers(muon, scheduled=False):
-    cfg=Config(muon=int(muon),batch=4,clip=0)
+def hidden_matrix(name,p):
+    return p.ndim==2 and name not in ('embedding','position','head')
+
+
+def adam_mask(ref):
+    """Flat mask of parameters updated by MantissaAdamW; Muon updates the rest."""
+    return np.concatenate([np.full(p.numel(),not hidden_matrix(name,p)) for name,p in ref.params.items()])
+
+
+def check_optimizers(scheduled=False):
+    cfg=Config(batch=4,clip=0)
     ref=Reference(cfg)
     engine=Native(cfg)
     try:
         initial=ref.flat();engine.set_weights(initial)
         groups=[]; matrices=[]
         for name,p in ref.params.items():
-            hidden=p.ndim==2 and name not in ('embedding','position','head')
-            if muon and hidden:
+            if hidden_matrix(name,p):
                 matrices.append(p)
             else:
-                groups.append({'params':[p], 'weight_decay':cfg.weight_decay if (hidden or name=='head') else 0})
+                groups.append({'params':[p], 'weight_decay':cfg.weight_decay if name=='head' else 0})
         adam=torch.optim.AdamW(groups,lr=cfg.learning_rate,betas=(cfg.beta1,cfg.beta2),eps=cfg.epsilon,foreach=False,fused=False)
-        other=torch.optim.Muon(matrices,lr=cfg.muon_lr,momentum=cfg.momentum,
-                                weight_decay=cfg.weight_decay,ns_steps=cfg.ns_steps) if muon else None
+        muon=torch.optim.Muon(matrices,lr=cfg.muon_lr,momentum=cfg.momentum,
+                               weight_decay=cfg.weight_decay,ns_steps=cfg.ns_steps)
         schedulers = []
         if scheduled:
             engine.check(engine.lib.tg_set_onecycle(engine.handle,C.byref(OneCycle(20))))
             schedulers.append(torch.optim.lr_scheduler.OneCycleLR(adam,max_lr=cfg.learning_rate,total_steps=20))
-            if other:
-                schedulers.append(torch.optim.lr_scheduler.OneCycleLR(other,max_lr=cfg.muon_lr,total_steps=20))
+            schedulers.append(torch.optim.lr_scheduler.OneCycleLR(muon,max_lr=cfg.muon_lr,total_steps=20))
         rng=np.random.default_rng(192)
         for step in range(20):
             grad=(rng.standard_normal(engine.count)*.01).astype(np.float32)
@@ -83,14 +90,17 @@ def check_optimizers(muon, scheduled=False):
                 p.grad=torch.tensor(grad[offset:offset+p.numel()].reshape(p.shape),device=p.device)
                 offset+=p.numel()
             adam.step()
-            if other:other.step()
+            muon.step()
             for scheduler in schedulers:scheduler.step()
         actual=engine.weights();expected=ref.flat()
         error=relative(actual-initial,expected-initial)
-        print(f'{"OneCycle " if scheduled else ""}{"Muon+" if muon else ""}MantissaAdamW: update rel={error:.6g}, max abs={np.max(abs(actual-expected)):.6g}',flush=True)
-        assert error < (.04 if muon else .0001)
-        if not muon:
-            np.testing.assert_allclose(actual,expected,atol=2e-6,rtol=2e-5)
+        # MantissaAdamW parameters must match exactly; Muon's BF16 Newton-Schulz only approximately.
+        a=adam_mask(ref)
+        adam_error=relative(actual[a]-initial[a],expected[a]-initial[a])
+        print(f'{"OneCycle " if scheduled else ""}Muon+MantissaAdamW: update rel={error:.6g}, max abs={np.max(abs(actual-expected)):.6g}; MantissaAdamW part rel={adam_error:.6g}',flush=True)
+        assert error < .04
+        assert adam_error < .0001
+        np.testing.assert_allclose(actual[a],expected[a],atol=2e-6,rtol=2e-5)
     finally:
         engine.close()
 
@@ -103,7 +113,8 @@ def check_small_updates():
         g=np.full(engine.count,.01,np.float32)
         engine.set_weights(w)
         engine.check(engine.lib.tg_optimizer_test(engine.handle,g.ctypes.data,64))
-        actual=engine.weights()
+        a=adam_mask(Reference(cfg))
+        actual,w,g=engine.weights()[a],w[a],g[a]
         p=torch.nn.Parameter(torch.tensor(w,device='cuda'))
         opt=torch.optim.AdamW([p],lr=cfg.learning_rate,betas=(cfg.beta1,cfg.beta2),eps=cfg.epsilon,weight_decay=0,foreach=False)
         for _ in range(64):p.grad=torch.tensor(g,device='cuda');opt.step()
@@ -117,7 +128,7 @@ def check_small_updates():
 
 
 def check_persistence(scheduled=False):
-    cfg=Config(batch=32,muon=1)
+    cfg=Config(batch=32)
     ref=Reference(cfg)
     data=np.random.default_rng(4).integers(0,256,4096,dtype=np.uint8)
     engines=[Native(cfg),Native(cfg)]
@@ -127,12 +138,12 @@ def check_persistence(scheduled=False):
             e.check(e.lib.tg_set_data(e.handle,data.ctypes.data,len(data)))
             if scheduled:
                 e.check(e.lib.tg_set_onecycle(e.handle,C.byref(OneCycle(8))))
-        engines[0].check(engines[0].lib.tg_train(engines[0].handle,8,1))
-        for _ in range(8):engines[1].check(engines[1].lib.tg_train(engines[1].handle,1,1))
+        engines[0].check(engines[0].lib.tg_train(engines[0].handle,8))
+        for _ in range(8):engines[1].check(engines[1].lib.tg_train(engines[1].handle,1))
         np.testing.assert_allclose(engines[0].weights(),engines[1].weights(),atol=2e-6,rtol=1e-4)
         print(f'{"OneCycle: " if scheduled else ""}Eight persistent updates match eight separate launches.',flush=True)
         if scheduled:
-            assert engines[0].lib.tg_train(engines[0].handle,1,1) < 0
+            assert engines[0].lib.tg_train(engines[0].handle,1) < 0
     finally:
         for e in engines:e.close()
 
@@ -155,12 +166,9 @@ def check_stream_evaluation():
         try:
             engine.set_weights(ref.flat())
             engine.check(engine.lib.tg_set_data(engine.handle,data.ctypes.data,len(data)))
-            loss = np.empty(context,np.float32)
             for _ in range(3):
-                engine.check(engine.lib.tg_evaluate(engine.handle,endpoints.ctypes.data,loss.ctypes.data))
+                loss = engine.batch(x,y,False)[2]
                 np.testing.assert_allclose(loss,expected,rtol=1e-6,atol=1e-6)
-                batch_loss = engine.batch(x,y,False)[2]
-                np.testing.assert_array_equal(loss,batch_loss)
             print(f'Stream evaluation ctx{context}: PyTorch and fixed batches match across sequential tiles.',flush=True)
         finally:
             engine.close()
@@ -200,11 +208,9 @@ if __name__=='__main__':
     check_model(4,4,batch=12,blocks=1) # full + partial tile, gradient accumulation
     check_model(8,8,batch=12,blocks=1) # three full tiles on one block
     check_stream_evaluation()
-    check_optimizers(False)
-    check_optimizers(True)
+    check_optimizers()
     check_onecycle()
-    check_optimizers(False,scheduled=True)
-    check_optimizers(True,scheduled=True)
+    check_optimizers(scheduled=True)
     check_small_updates()
     check_persistence()
     check_persistence(scheduled=True)

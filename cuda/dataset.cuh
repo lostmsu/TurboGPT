@@ -4,17 +4,15 @@
 
 // One endpoint calculation per sequence, shared by all of its byte positions.
 template <int Context>
-__device__ __forceinline__ void sample(const DeviceState &d, BlockWorkspace &s, int tile,
-                                       uint64_t step) {
+__device__ __forceinline__ void load_tile(const DeviceState &d, BlockWorkspace &s, int tile,
+                                          uint64_t step) {
     for (int local = threadIdx.x; local < TileTokens / Context; local += BlockThreads) {
         int sequence = tile * (TileTokens / Context) + local;
         int64_t endpoint = 0;
         if (sequence < d.config.batch && !d.input)
-            endpoint = d.endpoints
-                           ? d.endpoints[sequence]
-                           : 8 + int64_t(hash_u64(d.config.seed + step * uint64_t(d.config.batch) +
-                                                  sequence) %
-                                         uint64_t(d.size - 8));
+            endpoint =
+                8 + int64_t(hash_u64(d.config.seed + step * uint64_t(d.config.batch) + sequence) %
+                            uint64_t(d.size - 8));
 #pragma unroll
         for (int pos = 0; pos < Context; ++pos) {
             int row = local * Context + pos, token = sequence * Context + pos;

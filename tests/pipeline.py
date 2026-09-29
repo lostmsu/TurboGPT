@@ -16,7 +16,7 @@ def hash_u64(x):
 
 
 def check_pipeline(inflight, context=4, depth=4, batch=16):
-    cfg = Config(inflight=inflight, context=context, depth=depth, batch=batch, muon=1)
+    cfg = Config(inflight=inflight, context=context, depth=depth, batch=batch)
     live, frozen = Reference(cfg), Reference(cfg)
     initial = live.flat()
     data = np.random.default_rng(718).integers(0, 256, 4096, dtype=np.uint8)
@@ -33,7 +33,7 @@ def check_pipeline(inflight, context=4, depth=4, batch=16):
         engine.check(engine.lib.tg_set_onecycle(engine.handle, C.byref(OneCycle(total))))
         versions = []
         for count in chunks:
-            engine.check(engine.lib.tg_train(engine.handle, count, 1))
+            engine.check(engine.lib.tg_train(engine.handle, count))
             trace = np.empty(count, dtype=np.int32)
             engine.check(engine.lib.tg_training_versions(engine.handle, trace.ctypes.data, count))
             versions.extend(trace.tolist())
@@ -59,7 +59,7 @@ def check_pipeline(inflight, context=4, depth=4, batch=16):
     # amplifies them; sharing the tested gradient isolates optimizer correctness.
     # Match the worker team's reduction order. Otherwise harmless FP32
     # summation differences can cross BF16 rounding boundaries in later updates.
-    serial_cfg = Config(context=context, depth=depth, batch=cfg.batch, muon=1,
+    serial_cfg = Config(context=context, depth=depth, batch=cfg.batch,
                         blocks=worker_blocks)
     model_engine, optimizer_engine = Native(serial_cfg), Native(serial_cfg)
     optimizer_engine.set_weights(initial)

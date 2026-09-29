@@ -78,14 +78,13 @@ __device__ __forceinline__ void optimize(const DeviceState &d, BlockWorkspace &s
         s.result[0] = d.config.clip > 0 ? fminf(1.f, d.config.clip / (sqrtf(norm) + 1e-6f)) : 1.f;
     }
     __syncthreads();
-    float multiplier = d.lr_multiplier, beta1 = d.config.beta1, momentum = d.config.momentum;
+    float multiplier = 1, beta1 = d.config.beta1, momentum = d.config.momentum;
     if (d.schedule) {
         // Every optimizer update, including updates inside a persistent launch,
         // reads its own schedule point. Host chunk size does not quantize LR.
         StepRates rates = d.schedule[step];
         multiplier *= rates.multiplier;
-        if (d.cycle_momentum)
-            beta1 = momentum = rates.momentum;
+        beta1 = momentum = rates.momentum;
     }
     float clip = s.result[0], lr = d.config.learning_rate * multiplier;
     // Match torch.optim.AdamW's current-beta bias correction under cycling.
@@ -94,7 +93,7 @@ __device__ __forceinline__ void optimize(const DeviceState &d, BlockWorkspace &s
          i += d.blocks * BlockThreads) {
         bool hidden;
         bool decay = matrix_parameter(d, i, hidden);
-        if (d.config.muon && hidden)
+        if (hidden)
             continue;
         float g = d.gradient[i] * clip;
         float m = d.momentum[i] + (1 - beta1) * (g - d.momentum[i]);
@@ -105,17 +104,16 @@ __device__ __forceinline__ void optimize(const DeviceState &d, BlockWorkspace &s
         write_weight(d, i, w - (lr / bc1) * m / (sqrtf(v) / sqrtf(bc2) + d.config.epsilon));
     }
     __syncthreads();
-    if (d.config.muon)
-        for (int index = block_rank(d); index < d.config.depth * 5; index += d.blocks) {
-            const LayerParameters &p = d.layout.layers[index / 5];
-            int type = index % 5;
-            int weight = type == 0   ? p.qkv
-                         : type == 1 ? p.attention
-                         : type == 2 ? p.gate
-                         : type == 3 ? p.up
-                                     : p.down;
-            int rows = type == 0 || type == 2 || type == 3 ? 48 : 16;
-            int cols = type == 4 ? 48 : 16;
-            muon_matrix(d, s, weight, rows, cols, clip, d.config.muon_lr * multiplier, momentum);
-        }
+    for (int index = block_rank(d); index < d.config.depth * 5; index += d.blocks) {
+        const LayerParameters &p = d.layout.layers[index / 5];
+        int type = index % 5;
+        int weight = type == 0   ? p.qkv
+                     : type == 1 ? p.attention
+                     : type == 2 ? p.gate
+                     : type == 3 ? p.up
+                                 : p.down;
+        int rows = type == 0 || type == 2 || type == 3 ? 48 : 16;
+        int cols = type == 4 ? 48 : 16;
+        muon_matrix(d, s, weight, rows, cols, clip, d.config.muon_lr * multiplier, momentum);
+    }
 }

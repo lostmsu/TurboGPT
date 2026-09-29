@@ -2,10 +2,7 @@
 #include "utils.h"
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
 #include <random>
-#include <stdexcept>
 
 std::vector<float> initialize_weights(const Config &c) {
     ParameterLayout p = parameter_layout(c.depth, c.context);
@@ -32,30 +29,4 @@ std::vector<float> initialize_weights(const Config &c) {
     std::fill_n(w.begin() + p.final_norm, 16, 1.f);
     random(p.head, 4096, 3, .02f);
     return w;
-}
-
-void save_weights(const std::string &path, const Config &c, const std::vector<float> &w) {
-    auto parent = std::filesystem::path(path).parent_path();
-    if (!parent.empty())
-        std::filesystem::create_directories(parent);
-    std::ofstream file(path, std::ios::binary);
-    // TG02: RMSNorm + bias-free SwiGLU48. TGPT checkpoints used GELU64.
-    int header[] = {0x54473032, c.depth, c.context, int(w.size())};
-    file.write(reinterpret_cast<const char *>(header), sizeof(header));
-    file.write(reinterpret_cast<const char *>(w.data()), w.size() * 4);
-    if (!file)
-        throw std::runtime_error("Cannot save weights to " + path);
-}
-
-void load_weights(const std::string &path, const Config &config, std::vector<float> &weights) {
-    std::ifstream f(path, std::ios::binary);
-    int h[4]{};
-    f.read(reinterpret_cast<char *>(h), sizeof(h));
-    if (h[0] != 0x54473032 || h[1] != config.depth || h[2] != config.context ||
-        h[3] != int(weights.size()))
-        throw std::runtime_error(
-            "Checkpoint architecture or shape mismatch (requires TG02 SwiGLU48)");
-    f.read(reinterpret_cast<char *>(weights.data()), weights.size() * 4);
-    if (!f)
-        throw std::runtime_error("Truncated checkpoint");
 }

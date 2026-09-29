@@ -5,21 +5,21 @@ from pathlib import Path
 import numpy as np
 
 class Config(C.Structure):
-    _fields_ = [(x, C.c_int) for x in ('depth', 'context', 'batch', 'device', 'muon', 'blocks', 'ns_steps')] + [
+    _fields_ = [(x, C.c_int) for x in ('depth', 'context', 'batch', 'device', 'blocks', 'ns_steps')] + [
         (x, C.c_float) for x in ('learning_rate', 'muon_lr', 'beta1', 'beta2', 'momentum',
                                  'weight_decay', 'epsilon', 'clip')] + [('seed', C.c_uint64), ('inflight', C.c_int)]
 
     def __init__(self, **kwargs):
-        super().__init__(4, 4, 16, 0, 0, 0, 5, .0006, .02, .9, .95, .95, .1, 1e-8, 1., 3407, 1)
+        super().__init__(4, 4, 16, 0, 0, 5, .0006, .02, .9, .95, .95, .1, 1e-8, 1., 3407, 1)
         for key, value in kwargs.items():
             setattr(self, key, value)
 class OneCycle(C.Structure):
-    _fields_ = [('total_steps', C.c_int), ('cycle_momentum', C.c_int)] + [
-        (name, C.c_double) for name in ('pct_start', 'div_factor', 'final_div_factor',
-                                      'base_momentum', 'max_momentum')]
+    _fields_ = [('total_steps', C.c_int)] + [
+        (name, C.c_double) for name in ('warmup_fraction', 'initial_lr_fraction',
+                                        'final_lr_fraction', 'low_momentum', 'high_momentum')]
 
-    def __init__(self, total_steps, cycle_momentum=1):
-        super().__init__(total_steps, cycle_momentum, .3, 25, 10000, .85, .95)
+    def __init__(self, total_steps):
+        super().__init__(total_steps, .3, .04, .000004, .85, .95)
 
 
 class StepRates(C.Structure):
@@ -40,9 +40,8 @@ class Native:
         for name in ('set_weights', 'get_weights'):
             getattr(lib, 'tg_' + name).argtypes = [C.c_void_p, C.c_void_p]
         lib.tg_set_data.argtypes = [C.c_void_p, C.c_void_p, C.c_int64]
-        lib.tg_train.argtypes = [C.c_void_p, C.c_int, C.c_float]
+        lib.tg_train.argtypes = [C.c_void_p, C.c_int]
         lib.tg_training_versions.argtypes = [C.c_void_p, C.c_void_p, C.c_int]
-        lib.tg_evaluate.argtypes = [C.c_void_p, C.c_void_p, C.c_void_p]
         lib.tg_batch.argtypes = [C.c_void_p] * 6
         lib.tg_optimizer_test.argtypes = [C.c_void_p, C.c_void_p, C.c_int]
         lib.tg_set_onecycle.argtypes = [C.c_void_p, C.POINTER(OneCycle)]

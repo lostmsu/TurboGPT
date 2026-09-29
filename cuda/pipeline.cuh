@@ -81,6 +81,7 @@ __global__ __launch_bounds__(BlockThreads, MinResidentBlocks) void pipelined(
             __syncthreads();
             batch_gradient<Context>(d, s, step, RunMode::Train);
             team_sync(barrier, d.blocks);
+            record_loss_history<Context>(d, s, iteration);
             reduce_gradients(d, s, RunMode::Train);
             team_sync(barrier, d.blocks);
             if (d.rank == 0 && threadIdx.x == 0)

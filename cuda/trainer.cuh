@@ -66,11 +66,36 @@ __device__ __forceinline__ void batch_gradient(const DeviceState &d, BlockWorksp
     }
     __syncthreads();
     for (int tile = block_rank(d); tile < tiles; tile += d.blocks) {
-        sample<Context>(d, s, tile, step);
+        load_tile<Context>(d, s, tile, step);
         forward<Context>(d, s, saved, tile);
         if (mode != RunMode::Evaluate)
             backward<Context>(d, s, saved, partial, tile == block_rank(d));
     }
+}
+
+// Block 0 averages each position across the batch. Every step waits for it, so
+// the whole block reduces; a few serial threads would dominate the step time.
+template <int Context>
+__device__ __forceinline__ void record_loss_history(const DeviceState &d, BlockWorkspace &s,
+                                                    int iteration) {
+    static_assert(BlockThreads % Context == 0, "Each thread must keep one position");
+    if (block_rank(d) != 0)
+        return;
+    float sum = 0;
+    for (int i = threadIdx.x; i < d.config.batch * Context; i += BlockThreads)
+        sum += d.token_losses[i];
+    for (int offset = 16; offset >= Context; offset /= 2)
+        sum += __shfl_xor_sync(0xffffffff, sum, offset);
+    if (threadIdx.x % 32 < Context)
+        s.result[threadIdx.x / 32 * Context + threadIdx.x % 32] = sum;
+    __syncthreads();
+    if (threadIdx.x < Context) {
+        double total = 0;
+        for (int warp = 0; warp < BlockWarps; ++warp)
+            total += s.result[warp * Context + threadIdx.x];
+        d.loss_history[iteration * Context + threadIdx.x] = float(total / d.config.batch);
+    }
+    __syncthreads(); // reduce_gradients reuses s.result next.
 }
 
 // One cooperative launch owns complete synchronous optimizer steps.
@@ -86,6 +111,8 @@ __global__ __launch_bounds__(BlockThreads, MinResidentBlocks) void persistent(
             if (mode == RunMode::Evaluate)
                 return;
             grid.sync();
+            if (mode == RunMode::Train)
+                record_loss_history<Context>(d, s, iteration);
         }
         reduce_gradients(d, s, mode);
         grid.sync();

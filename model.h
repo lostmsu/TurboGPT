@@ -1,6 +1,5 @@
 #pragma once
 #include "config.h"
-#include <string>
 #include <vector>
 
 struct LayerParameters {
@@ -38,7 +37,5 @@ inline ParameterLayout parameter_layout(int depth, int context) {
     return p;
 }
 
-// Parameter initialization and weight-only checkpoints. Loading resets optimizer state.
+// Parameter initialization and layout shared by host code.
 std::vector<float> initialize_weights(const Config &config);
-void load_weights(const std::string &path, const Config &config, std::vector<float> &weights);
-void save_weights(const std::string &path, const Config &config, const std::vector<float> &weights);
