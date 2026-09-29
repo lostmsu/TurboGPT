@@ -34,8 +34,10 @@ function Get-Revision {
     $ErrorActionPreference = 'Continue'
     $hash = git -C $PSScriptRoot rev-parse HEAD 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $hash) { return [Text.Encoding]::UTF8.GetBytes('unknown') }
-    $index = Join-Path $outDir 'revision.index'
-    $diff = Join-Path $outDir 'revision.diff'
+    # Git failed to write this index inside build/ on one machine; the temp directory is safe.
+    $scratch = Join-Path ([IO.Path]::GetTempPath()) "turbogpt-revision-$PID"
+    $index = "$scratch.index"
+    $diff = "$scratch.diff"
     $realIndex = git -C $PSScriptRoot rev-parse --path-format=absolute --git-path index 2>$null
     $previousIndex = $env:GIT_INDEX_FILE
     try {
