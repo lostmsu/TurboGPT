@@ -29,8 +29,6 @@ __device__ __forceinline__ void load_tile(const DeviceState &d, BlockWorkspace &
     }
     __syncthreads();
     for (int i = threadIdx.x; i < TileTokens * 16; i += BlockThreads)
-        s.hidden[i] = __float2bfloat16_rn(
-            float(d.weight_high[d.layout.embedding + s.x[i / 16] * 16 + i % 16]) +
-            float(d.weight_high[d.layout.position + (i / 16 % Context) * 16 + i % 16]));
+        s.hidden[i] = d.weight_high[d.layout.embedding + s.x[i / 16] * 16 + i % 16];
     __syncthreads();
 }

@@ -42,7 +42,7 @@ def check_pipeline(inflight, context=4, depth=4, batch=16):
         engine.close()
     groups, matrices = [], []
     for name, parameter in live.params.items():
-        hidden = parameter.ndim == 2 and name not in ('embedding', 'position', 'head')
+        hidden = parameter.ndim == 2 and name not in ('embedding', 'head')
         if hidden:
             matrices.append(parameter)
         else:

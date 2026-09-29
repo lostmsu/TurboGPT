@@ -6,10 +6,10 @@ struct LayerParameters {
     int attention_norm, qkv, attention, mlp_norm, gate, up, down;
 };
 struct ParameterLayout {
-    int embedding, position, final_norm, head, count;
+    int embedding, final_norm, head, count;
     LayerParameters layers[8];
 };
-inline ParameterLayout parameter_layout(int depth, int context) {
+inline ParameterLayout parameter_layout(int depth) {
     ParameterLayout p{};
     int n = 0;
     auto take = [&](int size) {
@@ -18,7 +18,6 @@ inline ParameterLayout parameter_layout(int depth, int context) {
         return offset;
     };
     p.embedding = take(256 * 16);
-    p.position = take(context * 16);
     for (int l = 0; l < depth; ++l) {
         auto &b = p.layers[l];
         b.attention_norm = take(16);

@@ -1,6 +1,34 @@
 #pragma once
 #include "types.cuh"
 
+// Partial RoPE, as in GLM-5.3 and MiMo-V2.6-Pro: each 4-wide query/key head rotates its
+// first (interleaved) pair by one radian per position; the second pair has no position.
+// With a single rotated pair the frequency is theta^0, so no base theta applies.
+static __constant__ float RopeCos[8] = {1.0f, 0.5403022766113281f, -0.416146844625473f,
+                                        -0.9899924993515015f, -0.6536436080932617f,
+                                        0.28366219997406006f, 0.9601702690124512f,
+                                        0.7539022564888f};
+static __constant__ float RopeSin[8] = {0.0f, 0.8414709568023682f, 0.9092974066734314f,
+                                        0.14112000167369843f, -0.756802499294281f,
+                                        -0.9589242935180664f, -0.279415488243103f,
+                                        0.6569865942001343f};
+
+// Rotates query and key heads in place after the QKV projection. Inverse applies the
+// transpose, turning rotated-space query/key gradients into projection gradients.
+// Unfused products keep the rounding identical to the PyTorch reference.
+template <int Context, bool Inverse = false>
+__device__ __forceinline__ void rope(bf16 *qkv) {
+    for (int i = threadIdx.x; i < TileTokens * 8; i += BlockThreads) {
+        int row = i / 8, pos = row % Context;
+        bf16 *pair = qkv + row * 48 + i % 8 * 4; // query heads 0-3, then key heads 0-3
+        float x = float(pair[0]), y = float(pair[1]);
+        float cos = RopeCos[pos], sin = Inverse ? -RopeSin[pos] : RopeSin[pos];
+        pair[0] = __float2bfloat16_rn(__fsub_rn(__fmul_rn(x, cos), __fmul_rn(y, sin)));
+        pair[1] = __float2bfloat16_rn(__fadd_rn(__fmul_rn(x, sin), __fmul_rn(y, cos)));
+    }
+    __syncthreads();
+}
+
 // Causal running-max attention: retain only the winning key and its GELU gate.
 template <int Context>
 __device__ __forceinline__ int selected_key(const bf16 *qkv, int row, int head, float &top) {

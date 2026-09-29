@@ -3,8 +3,8 @@ import math
 import torch
 from torch.nn import functional as F
 
-def specification(depth, context):
-    entries = [('embedding', (256, 16)), ('position', (context, 16))]
+def specification(depth):
+    entries = [('embedding', (256, 16))]
     for l in range(depth):
         for name, shape in [('ln1w', (16,)), ('qkv', (48,16)), ('attention', (16,16)),
                             ('ln2w', (16,)), ('gate', (48,16)), ('up', (48,16)),
@@ -26,7 +26,7 @@ class Reference:
         self.config = config
         torch.manual_seed(seed)
         self.params = {}
-        for name, shape in specification(config.depth, config.context):
+        for name, shape in specification(config.depth):
             if name.endswith(('ln1w', 'ln2w', 'finalw')):
                 value = torch.ones(shape, device=device)
             elif len(shape) == 1:
@@ -54,11 +54,20 @@ class Reference:
             return F.rms_norm(x.float(), (16,), p[name+'w'], eps=1e-6).bfloat16()
         def linear(x, name):
             return F.linear(x, q[name])
-        h = F.embedding(x, q['embedding']) + q['position'].unsqueeze(0)
+        h = F.embedding(x, q['embedding'])
+        positions = torch.arange(x.shape[1], device=x.device, dtype=torch.float64)
+        cos, sin = torch.cos(positions).float(), torch.sin(positions).float()
+        def rope(t):
+            # Partial RoPE: each head's first (interleaved) pair turns 1 rad per position.
+            t = t.float()
+            x0, x1 = t[..., 0], t[..., 1]
+            return torch.stack((x0 * cos - x1 * sin, x0 * sin + x1 * cos, t[..., 2], t[..., 3]),
+                               -1).bfloat16()
         for l in range(self.config.depth):
             s = str(l) + '.'
             packed = linear(norm(h,s+'ln1'),s+'qkv')
             query,key,value = [a.reshape(*x.shape,4,4).transpose(1,2) for a in packed.split(16,-1)]
+            query, key = rope(query), rope(key)
             scores = query.float() @ key.float().transpose(-1,-2)
             mask = torch.ones(x.shape[1],x.shape[1],device=x.device,dtype=torch.bool).tril()
             top, index = scores.masked_fill(~mask, -1e30).max(-1,keepdim=True)

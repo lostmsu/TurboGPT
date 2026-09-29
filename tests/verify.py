@@ -53,7 +53,7 @@ def check_model(depth, context, batch=16, blocks=0):
 
 
 def hidden_matrix(name,p):
-    return p.ndim==2 and name not in ('embedding','position','head')
+    return p.ndim==2 and name not in ('embedding','head')
 
 
 def adam_mask(ref):

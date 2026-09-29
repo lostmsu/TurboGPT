@@ -83,7 +83,7 @@ TG_API Engine *tg_create(const Config *c) {
             throw std::runtime_error("Requires cooperative launch and BF16 tensor cores (SM80+)");
         e = new Engine;
         e->d.config = *c;
-        e->d.layout = parameter_layout(c->depth, c->context);
+        e->d.layout = parameter_layout(c->depth);
         check_cuda(cudaStreamCreate(&e->stream));
         e->kernel = c->context == 4 ? (void *)persistent<4> : (void *)persistent<8>;
 #if TURBOGPT_PIPELINE

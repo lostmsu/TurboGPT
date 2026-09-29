@@ -53,7 +53,8 @@ __device__ __forceinline__ void batch_gradient(const DeviceState &d, BlockWorksp
     float *partial = d.partial_gradients + block_rank(d) * d.layout.count;
     int tiles = (d.config.batch * Context + TileTokens - 1) / TileTokens;
     if (mode != RunMode::Evaluate) {
-        int clear = block_rank(d) >= tiles ? d.layout.count : d.layout.position + Context * 16;
+        // Embedding rows accumulate atomically; the first tile overwrites the rest.
+        int clear = block_rank(d) >= tiles ? d.layout.count : d.layout.embedding + 256 * 16;
         for (int i = threadIdx.x; i < clear; i += BlockThreads)
             partial[i] = 0;
         if (threadIdx.x < 16 && block_rank(d) < tiles) {

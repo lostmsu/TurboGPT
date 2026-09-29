@@ -27,7 +27,7 @@ one report per batch, capped at 8Mi reports, and flushed with periodic or final 
 
 ## Result
 
-- hn1g after 1.5G training tokens: **2.52435 BPB**.
+- hn1g after 1.5G training tokens: **2.5295 BPB**.
 
 ## Tests
 

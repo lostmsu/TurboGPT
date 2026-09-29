@@ -31,7 +31,7 @@ std::string node() {
 
 std::string model_description(const TrainingConfig &options) {
     std::ostringstream out;
-    out << options.model.batch << "xswiglu48-rmsnorm depth=" << options.model.depth
+    out << options.model.batch << "xswiglu48-rmsnorm-rope depth=" << options.model.depth
         << " context=" << options.model.context << " width=16 heads=4";
     return "```\n" + out.str() + "\n```";
 }

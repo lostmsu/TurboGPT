@@ -525,7 +525,7 @@ TrainingState load_training_state(const std::string &path, const Config &config)
 
     const int64_t depth = read_scalar(archive, record("data/0"));
     const int64_t context = read_scalar(archive, record("data/1"));
-    const uint32_t count = uint32_t(parameter_layout(config.depth, config.context).count);
+    const uint32_t count = uint32_t(parameter_layout(config.depth).count);
     if (depth != config.depth || context != config.context)
         throw std::runtime_error("Checkpoint architecture mismatch");
     state.weights = read_float32s(archive, record("data/2"), count);
@@ -553,7 +553,7 @@ TrainingState load_training_state(const std::string &path, const Config &config)
 
 void save_training_state(const std::string &path, const Config &config,
                          const TrainingState &state) {
-    const int count = parameter_layout(config.depth, config.context).count;
+    const int count = parameter_layout(config.depth).count;
     if (int(state.weights.size()) != count || int(state.momentum.size()) != count ||
         int(state.variance.size()) != count)
         throw std::runtime_error("Checkpoint state does not match the model");

@@ -16,6 +16,7 @@ __device__ __forceinline__ void forward(const DeviceState &d, BlockWorkspace &s,
             a.x[i] = s.hidden[i];
         normalize(d, a.x, p.attention_norm, s.normalized);
         project<16, 48>(s.normalized, w.qkv, a.qkv);
+        rope<Context>(a.qkv);
         attention_forward<Context>(a, s.branch, false);
         project<16, 16>(s.branch, w.attention, a.middle, a.x);
         normalize<CacheWeights>(d, a.middle, p.mlp_norm, s.normalized);
@@ -87,13 +88,12 @@ __device__ __forceinline__ void backward(const DeviceState &d, BlockWorkspace &s
         linear_backward(d, s, s.work, s.dhidden, p.attention, 16, 16, s.branch, grad, first,
                         w.attention);
         attention_backward<Context>(s, a, s.branch, s.dqkv);
+        rope<Context, true>(s.dqkv);
         normalize(d, a.x, p.attention_norm, s.normalized);
         linear_backward(d, s, s.normalized, s.dqkv, p.qkv, 16, 48, s.branch, grad, first, w.qkv);
         norm_backward(d, a.x, s.branch, p.attention_norm, s.dhidden, grad, true);
     }
-    for (int i = threadIdx.x; i < TileTokens * 16; i += BlockThreads) {
+    for (int i = threadIdx.x; i < TileTokens * 16; i += BlockThreads)
         atomicAdd(grad + d.layout.embedding + s.x[i / 16] * 16 + i % 16, float(s.dhidden[i]));
-        atomicAdd(grad + d.layout.position + (i / 16 % Context) * 16 + i % 16, float(s.dhidden[i]));
-    }
     __syncthreads();
 }

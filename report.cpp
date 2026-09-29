@@ -44,7 +44,7 @@ void json_string(std::ostream &out, const std::string &value) {
 } // namespace
 
 void log_config(Engine *engine, const TrainingConfig &o, int steps, int64_t size) {
-    std::cout << "{\"config\":{\"architecture\":\"swiglu48-rmsnorm\",\"depth\":" << o.model.depth
+    std::cout << "{\"config\":{\"architecture\":\"swiglu48-rmsnorm-rope\",\"depth\":" << o.model.depth
               << ",\"ctx\":" << o.model.context << ",\"batch\":" << o.model.batch
               << ",\"inflight\":" << o.model.inflight << ",\"chunk\":" << o.chunk
               << ",\"optimizer\":\"muon\",\"parameters\":" << tg_parameter_count(engine)
@@ -82,7 +82,7 @@ static void report(std::ostream &out, const TrainingConfig &o, const RunReport &
     const double log2 = std::log(2.0);
     const double final_loss = r.final_losses.back();
     out << std::setprecision(10)
-        << "{\"architecture\":\"swiglu48-rmsnorm\",\"depth\":" << o.model.depth
+        << "{\"architecture\":\"swiglu48-rmsnorm-rope\",\"depth\":" << o.model.depth
         << ",\"ctx\":" << o.model.context << ",\"batch\":" << o.model.batch
         << ",\"inflight\":" << o.model.inflight << ",\"chunk\":" << o.chunk
         << ",\"seed\":" << o.model.seed
