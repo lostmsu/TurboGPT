@@ -81,7 +81,7 @@ $revisionSource = Join-Path $outDir 'revision.cpp'
 Write-RevisionSource $revisionSource
 
 $flags = @('-O3', '-std=c++17', '--use_fast_math', '-lineinfo', '--threads', '0',
-    '--split-compile', '0', '-Xcompiler', '/Zc:preprocessor,/MD', '-cudart', 'hybrid')
+    '--split-compile', '0', '-Xcompiler', '/Zc:preprocessor,/MT')
 $flags += @("-DTURBOGPT_THREADS=$Threads", "-DTURBOGPT_TILE=$Tile", "-DTURBOGPT_PIPELINE=$([int]$Pipeline.IsPresent)")
 foreach ($target in $CudaArch.Split(',')) {
     $flags += @('-gencode', "arch=compute_$target,code=sm_$target")
@@ -106,7 +106,7 @@ function Get-SourceDigest([string]$Source) {
     try {
         # GPU architecture/tile choices do not invalidate the ordinary C++ units.
         $unitSignature = if ([IO.Path]::GetExtension($Source) -eq '.cu') { $signature } else {
-            'MSVC /O2 /std:c++17 /EHsc /MD'
+            'MSVC /O2 /std:c++17 /EHsc /MT'
         }
         $prefix = [Text.Encoding]::UTF8.GetBytes($unitSignature)
         $bytes.Write($prefix, 0, $prefix.Length)
@@ -185,17 +185,17 @@ try {
                 $cudaChanged = $true
             } else {
                 Invoke-Compiler "$($unit)_compile_seconds" 'cl.exe' @(
-                    '/nologo', '/O2', '/std:c++17', '/EHsc', '/MD', '/c', $source, "/Fo$object")
+                    '/nologo', '/O2', '/std:c++17', '/EHsc', '/MT', '/c', $source, "/Fo$object")
             }
             $changed = $true
         }
     }
     if ($changed -or -not (Test-Path -LiteralPath $exe)) {
-        Invoke-Compiler 'exe_link_seconds' $nvcc (@('-Xcompiler', '/MD') + $objects + @('-o', $exe))
+        Invoke-Compiler 'exe_link_seconds' $nvcc (@('-Xcompiler', '/MT') + $objects + @('-o', $exe))
     }
     # The DLL exposes the same GPU code to the oracle.
     if ($cudaChanged -or -not (Test-Path -LiteralPath $dll)) {
-        Invoke-Compiler 'dll_link_seconds' $nvcc (@('-Xcompiler', '/MD', '-shared') + $cudaObjects + @('-o', $dll))
+        Invoke-Compiler 'dll_link_seconds' $nvcc (@('-Xcompiler', '/MT', '-shared') + $cudaObjects + @('-o', $dll))
     }
     [IO.File]::WriteAllText($manifest, ($hashes | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
     $phases['build_seconds'] = $totalTimer.Elapsed.TotalSeconds
