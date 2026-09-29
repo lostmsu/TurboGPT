@@ -4,6 +4,12 @@ Tiny byte-level GPT training in CUDA C++. MIT.
 
 ## Build
 
+Linux/NixOS:
+
+```bash
+nix-build -o build/nix-result
+```
+
 Windows, Visual Studio 2022 C++ tools, and CUDA 13.4:
 
 ```powershell

@@ -1,6 +1,8 @@
 /experiments/
 
 build/
+result
+result-*
 __pycache__/
 *.pyc
 runs/
