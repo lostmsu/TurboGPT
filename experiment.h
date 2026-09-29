@@ -7,7 +7,7 @@ inline Config experiment_model() {
     Config model;
     model.depth = 4;
     model.context = 4;
-    model.batch = 2560;
+    model.batch = 2880;
     model.device = 0;
     model.blocks = 0;
     model.ns_steps = 5;
