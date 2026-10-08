@@ -30,7 +30,7 @@ class Native:
     def __init__(self, config):
         self.config = config
         self.lib = C.CDLL(os.environ.get('TURBOGPT_LIBRARY',
-                         str(Path(__file__).resolve().parents[1] / 'build/turbogpt.dll')))
+                         str(Path(__file__).resolve().parents[1] / 'target/release/libturbogpt.so')))
         lib = self.lib
         lib.tg_error.restype = C.c_char_p
         lib.tg_create.argtypes = [C.POINTER(Config)]

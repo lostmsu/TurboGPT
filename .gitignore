@@ -1,8 +1,13 @@
 /experiments/
 
 build/
-result
-result-*
+target/
+.revision
+# cuda-oxide writes device artifacts next to Cargo.toml.
+/*.ll
+/*.ptx
+/*.ltoir
+/*.cubin
 __pycache__/
 *.pyc
 runs/

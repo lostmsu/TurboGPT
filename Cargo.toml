@@ -1,0 +1,25 @@
+[package]
+name = "turbogpt"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Tiny byte-level GPT training in CUDA Rust (cuda-oxide)"
+
+# Standalone: cuda-oxide builds this crate with its own rustc codegen backend.
+[workspace]
+
+[lib]
+# The cdylib exposes the tg_* C interface to the PyTorch oracle in tests/.
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "turbogpt"
+path = "src/main.rs"
+
+[dependencies]
+cuda-core = { git = "https://github.com/NVlabs/cuda-oxide.git", rev = "a0cc6cc0bc" }
+cuda-device = { git = "https://github.com/NVlabs/cuda-oxide.git", rev = "a0cc6cc0bc" }
+cuda-host = { git = "https://github.com/NVlabs/cuda-oxide.git", rev = "a0cc6cc0bc" }
+
+[profile.release]
+debug = "line-tables-only"
