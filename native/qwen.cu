@@ -884,11 +884,11 @@ int main(int argc, char **argv) {
 #else
         setenv("CUDA_DEVICE_ORDER", "PCI_BUS_ID", 1);
 #endif
-        int device = 1, context = experiment::Context, accumulation = 1, physical_batch=-1, total_batch=ReferenceBatch, steps = experiment::Steps, rank = 16, eval_every = experiment::EvalEvery, eval_samples = experiment::EvalSamples, warmup_steps = 3,profile_step=0,workspace_mib=1024,benchmark_warmup=2;
-        double budget = -1, duration = 0; float learning_rate = 0, alpha = 32;
-        uint32_t seed = 3407; bool test = false, adapters = true, all_logits = false, accumulation_set=false;
-        std::string assets = experiment::Assets, output = experiment::Output, resume, inference_input, train_input, precision="bf16";
-        std::string optimizer_kind="muon",schedule="warmup",checkpointing="layer",eval_input,probe,graphs="on";
+        int device = experiment::Device, context = experiment::Context, accumulation = 1, physical_batch=-1, total_batch=ReferenceBatch, steps = experiment::Steps, rank = experiment::Rank, eval_every = experiment::EvalEvery, eval_samples = experiment::EvalSamples, warmup_steps = experiment::WarmupSteps,profile_step=0,workspace_mib=1024,benchmark_warmup=2;
+        double budget = -1, duration = 0; float learning_rate = 0, alpha = experiment::Alpha;
+        uint32_t seed = experiment::Seed; bool test = false, adapters = true, all_logits = false, accumulation_set=false;
+        std::string assets = experiment::Assets, output = experiment::Output, resume, inference_input, train_input, precision=experiment::Precision;
+        std::string optimizer_kind=experiment::Optimizer,schedule=experiment::Schedule,checkpointing="layer",eval_input,probe,graphs="on";
         for (int i = 1; i < argc; ++i) {
             std::string key = argv[i];
             if (key == "--self-test") { test = true; continue; }
@@ -955,7 +955,7 @@ int main(int argc, char **argv) {
         }
         cuda_check(cudaSetDevice(device));
         if (test) return self_test();
-        if(learning_rate==0)learning_rate=optimizer_kind=="muon"?0.001f:0.0001f;
+        if(learning_rate==0)learning_rate=optimizer_kind==experiment::Optimizer?experiment::LearningRate:(optimizer_kind=="muon"?0.001f:0.0001f);
         if(schedule!="warmup" && schedule!="onecycle")throw std::runtime_error("Unknown schedule");
         if (accumulation < 1 || physical_batch<1 || workspace_mib<1 || steps < 1 || rank < 1 || eval_every < 1 || eval_samples < 1 || budget <= 0 || warmup_steps < 0 || learning_rate <= 0 || alpha <= 0 || duration < 0)
             throw std::runtime_error("Invalid trainer configuration");

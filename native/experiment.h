@@ -3,6 +3,10 @@
 // Commit the implementation, then edit these constants inline for a run.
 // build.ps1 embeds HEAD followed by the complete working-tree diff in TensorBoard.
 namespace experiment {
+constexpr int Device = 1, Rank = 16, WarmupSteps = 3;
+constexpr unsigned Seed = 3407;
+constexpr float Alpha = 32, LearningRate = 0.001f;
+constexpr const char *Optimizer = "muon", *Precision = "bf16", *Schedule = "warmup";
 constexpr int Context = 512, Batch = 16, EffectiveBatch = 128, Steps = 100;
 constexpr double VramGiB = 12;
 constexpr bool Evaluate = true, Sequential = false;

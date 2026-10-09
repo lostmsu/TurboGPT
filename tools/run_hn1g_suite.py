@@ -185,7 +185,7 @@ def write_summary(root, results, plan):
     smoothing = plan["window_tokens"] // TOKENS_PER_UPDATE
     for result in results:
         rows = canonical_training_rows(root / result["run"] / "metrics.jsonl")
-        axis = axes[result["sampling"] == "sequential"]
+        axis = axes[int(result["sampling"] == "sequential")]
         values = [x["last_bpb"] for x in rows]
         means = [sum(values[max(0, i-smoothing+1):i+1]) / min(i+1, smoothing) for i in range(len(values))]
         axis.plot([x["processed_tokens"]/1e6 for x in rows], means, label=str(result["context"]))
@@ -307,7 +307,7 @@ def main():
                 provenance = json.loads(provenance_path.read_text())
                 if provenance["git_head"] != head or provenance["plan"] != plan or provenance["variant"] != spec or sha256(executable) != provenance["executable_sha256"]:
                     raise ValueError("The archived run's provenance does not match this suite")
-                command = [str(executable), "--device", "1"]
+                command = [str(executable)]
                 checkpoint = directory / "checkpoint.bin"
                 if checkpoint.exists():
                     completed = checkpoint_step(checkpoint)
