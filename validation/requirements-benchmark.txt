@@ -1,0 +1,6 @@
+# Optional optimized PyTorch comparison, isolated from the native trainer.
+# Install requirements.txt and CUDA PyTorch first. Windows uses Triton below;
+# Linux users should install the PyTorch-compatible upstream Triton instead.
+triton-windows==3.8.0.post29; sys_platform == "win32"
+fla-core==0.5.2
+einops==0.8.2

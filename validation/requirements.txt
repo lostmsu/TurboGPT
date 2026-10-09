@@ -1,0 +1,9 @@
+# Reference validation only. Native training never imports these packages.
+# Install CUDA PyTorch separately with --index-url https://download.pytorch.org/whl/cu132
+torch==2.14.1
+transformers==5.19.0
+accelerate==1.15.0
+safetensors==0.8.0
+numpy==2.5.3
+huggingface-hub==1.33.0
+tokenizers==0.23.2

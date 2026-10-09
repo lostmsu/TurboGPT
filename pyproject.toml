@@ -1,0 +1,26 @@
+[project]
+name = "qwen-tuning"
+version = "0.1.0"
+description = "Asset preparation for the native CUDA C++ Qwen trainer"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "huggingface-hub==1.33.0",
+    "numpy==2.5.3",
+    "tokenizers==0.23.2",
+]
+
+[project.optional-dependencies]
+experiments = ["tensorboard>=2.20,<3", "matplotlib>=3.10,<4"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["qwen_tuning*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/test_native_assets.py"]

@@ -11,3 +11,8 @@ target/
 __pycache__/
 *.pyc
 runs/
+.venv/
+validation/.venv/
+.cache/
+.pytest_cache/
+*.egg-info/
