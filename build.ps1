@@ -4,7 +4,8 @@ param(
     [ValidatePattern('^(86|89|120)(,(86|89|120))*$')]
     [string]$CudaArch = '86,120',
     [switch]$Run,
-    [string[]]$TrainingArgs = @()
+    [string[]]$TrainingArgs = @(),
+    [switch]$LastBpb
 )
 $ErrorActionPreference = 'Stop'
 if ($TrainingArgs.Count -and -not $Run) { throw 'TrainingArgs requires -Run.' }
@@ -72,14 +73,17 @@ try {
     foreach ($target in $CudaArch.Split(',')) {
         $flags += @('-gencode', "arch=compute_$target,code=sm_$target")
     }
-    & $nvcc @flags -c (Join-Path $PSScriptRoot 'native\qwen.cu') -o (Join-Path $outDir 'qwen.obj')
+    $targetName = if ($LastBpb) { 'last-bpb' } else { 'qwen-tune' }
+    $sourceName = if ($LastBpb) { 'last_bpb.cu' } else { 'qwen.cu' }
+    $cudaObject = Join-Path $outDir "$targetName.obj"
+    & $nvcc @flags -c (Join-Path $PSScriptRoot "native\$sourceName") -o $cudaObject
     if ($LASTEXITCODE -ne 0) { throw 'CUDA compilation failed.' }
     & cl.exe /nologo /O2 /std:c++20 /EHsc /MT /c (Join-Path $PSScriptRoot 'native\tensorboard.cpp') "/Fo$(Join-Path $outDir 'tensorboard.obj')"
     if ($LASTEXITCODE -ne 0) { throw 'TensorBoard logger compilation failed.' }
     & cl.exe /nologo /O2 /std:c++20 /EHsc /MT /c (Join-Path $outDir 'revision.cpp') "/Fo$(Join-Path $outDir 'revision.obj')"
     if ($LASTEXITCODE -ne 0) { throw 'Revision compilation failed.' }
-    $exe = Join-Path $outDir 'qwen-tune.exe'
-    & $nvcc (Join-Path $outDir 'qwen.obj') (Join-Path $outDir 'tensorboard.obj') (Join-Path $outDir 'revision.obj') -L (Join-Path $cuda 'lib\x64') cublas.lib cuda.lib -o $exe
+    $exe = Join-Path $outDir "$targetName.exe"
+    & $nvcc $cudaObject (Join-Path $outDir 'tensorboard.obj') (Join-Path $outDir 'revision.obj') -L (Join-Path $cuda 'lib\x64') cublas.lib cuda.lib -o $exe
     if ($LASTEXITCODE -ne 0) { throw 'Link failed.' }
     Write-Host "Built $exe"
     if ($Run) {
