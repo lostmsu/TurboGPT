@@ -219,6 +219,7 @@ struct Graph {
     Arena &arena; Blas &blas; bool training;
     bool adapters = true;
     int context=0,batch=1;
+    std::function<void(int,T)> observe_layer;
     std::vector<std::unique_ptr<Tensor>> tensors;
     std::vector<std::function<void()>> tape;
     Graph(Arena &a, Blas &b, bool train) : arena(a), blas(b), training(train) {}
@@ -460,6 +461,7 @@ T forward(Graph &g, Parameters &p, uint32_t *ids, int context) {
     if(!g.context)g.context=context;
     T x = g.tensor(context, Hidden);
     p.embed(ids,x->data,context);
+    if(g.observe_layer)g.observe_layer(0,x);
     if(!g.training) {
         // Inference has no backward tape. Reuse one layer's scratch instead of
         // retaining all 24 layers, including six quadratic attention matrices.
@@ -468,11 +470,14 @@ T forward(Graph &g, Parameters &p, uint32_t *ids, int context) {
             g.arena.position=workspace;Graph layer(g.arena,g.blas,false);
             layer.context=g.context;layer.batch=g.batch;layer.adapters=g.adapters;
             T input=layer.view(x->data,context,Hidden),out=layer_forward(layer,p,input,l);
+            if(g.observe_layer)g.observe_layer(l+1,out);
             cuda_check(cudaMemcpyAsync(next->data,out->data,x->size()*4,cudaMemcpyDeviceToDevice,cudaStreamPerThread));
             std::swap(x,next);
         }
         g.arena.position=workspace;
-        return g.norm(x,Hidden,p.w("norm.weight"),1);
+        T normalized=g.norm(x,Hidden,p.w("norm.weight"),1);
+        if(g.observe_layer)g.observe_layer(25,normalized);
+        return normalized;
     }
     for (int l = 0; l < 24; ++l)x=layer_forward(g,p,x,l);
     return g.norm(x, Hidden, p.w("norm.weight"), 1);
@@ -779,6 +784,15 @@ void inference_export(Arena &arena, Blas &blas, Parameters &p, const std::string
         arena.position=p.persistent;
         uint32_t *ids=arena.alloc<uint32_t>(context);cuda_check(cudaMemcpy(ids,tokens.data(),context*4,cudaMemcpyHostToDevice));
         Graph graph(arena,blas,false);graph.adapters=adapters;
+        std::ofstream trace;
+        if(sample==0 && std::getenv("QWEN_TRACE_LAYERS")) {
+            trace.open(output/"first-sample-layers.f32",std::ios::binary);
+            graph.observe_layer=[&](int layer,T value) {
+                std::vector<float> host(value->size());cuda_check(cudaMemcpy(host.data(),value->data,host.size()*4,cudaMemcpyDeviceToHost));
+                trace.write(reinterpret_cast<const char *>(host.data()),host.size()*4);
+                if(!trace)throw std::runtime_error("Layer trace write failed");
+            };
+        }
         T h=forward(graph,p,ids,context);
         std::vector<float> hidden(h->size());cuda_check(cudaMemcpy(hidden.data(),h->data,hidden.size()*4,cudaMemcpyDeviceToHost));
         hidden_file.write(reinterpret_cast<const char *>(hidden.data()),hidden.size()*4);

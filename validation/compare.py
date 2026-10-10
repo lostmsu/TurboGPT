@@ -45,6 +45,7 @@ def metrics(logits, targets, lengths):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--output",type=Path,default=ROOT/"runs/transformers-parity")
+    parser.add_argument("--assets",type=Path,default=ROOT/".cache/native/assets.json")
     parser.add_argument("--samples",type=int,default=128)
     parser.add_argument("--context",type=int,default=512)
     parser.add_argument("--vram-gib",type=float,default=8,help="Native inference arena cap in GiB")
@@ -52,6 +53,7 @@ def main():
     parser.add_argument("--device",type=int,default=1)
     parser.add_argument("--split",choices=["train","validation"],default="validation")
     parser.add_argument("--all-logits",action="store_true")
+    parser.add_argument("--trace-layers",action="store_true",help="Compare first-sample states at every text layer")
     parser.add_argument("--accuracy-only",action="store_true",help="Record cross-precision errors without asserting IEEE equivalence; zero-adapter/NLL checks still apply")
     parser.add_argument("--precision",choices=["fp32","tf32","tf32x2","bf16","bf16x9"],default="fp32")
     parser.add_argument("--reference-dtype",choices=["fp32","bf16","bf16-gemm"],default=None,
@@ -61,11 +63,12 @@ def main():
     if not 1 <= args.context <= 4096:parser.error("Inference context range is 1..4096")
     if args.reference_dtype is None:args.reference_dtype="fp32"
     args.output.mkdir(parents=True,exist_ok=True)
-    assets=json.loads((ROOT/".cache/native/assets.json").read_text())
+    assets=json.loads(args.assets.read_text())
     input_path,ids=make_inputs(args.output,assets,args.samples,args.context,args.seed,args.split)
     lengths=np.fromfile(assets["paths"]["token_bytes"],dtype="<u4")
     env=os.environ.copy(); cuda=Path(env.get("CUDA_PATH",r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.4"))
     env["PATH"]=str(cuda/"bin")+os.pathsep+str(cuda/"bin/x64")+os.pathsep+env["PATH"]
+    if args.trace_layers:env["QWEN_TRACE_LAYERS"]="1"
     for mode in ["base","zero"]:
         command=[str(args.exe),"--device",str(args.device),"--context",str(max(8,args.context)),"--precision",args.precision,"--vram-gib",str(args.vram_gib),
                  "--inference-input",str(input_path),"--output",str(args.output/mode)]
@@ -126,6 +129,7 @@ def main():
     model.eval()
     device=torch.device(f"cuda:{args.device}")
     references=np.empty((args.samples,248320),dtype=np.float32)
+    layer_differences=[]
     max_hidden_error=max_logit_error=max_hidden_relative=0.0; squared_error=0.0; logit_count=0; top1_matches=0
     start=time.monotonic()
     with torch.inference_mode():
@@ -133,6 +137,16 @@ def main():
             input_ids=torch.as_tensor(ids[sample,:-1].astype(np.int64),device=device).unsqueeze(0)
             out=model(input_ids=input_ids,use_cache=False,output_hidden_states=True,logits_to_keep=0 if args.all_logits else 1)
             h=out.hidden_states[-1][0].float().cpu().numpy(); ref=out.logits[0].float().cpu().numpy()
+            if sample==0 and args.trace_layers:
+                trace=np.memmap(args.output/"base/first-sample-layers.f32",dtype="<f4",mode="r",shape=(26,args.context,1024))
+                for index,state in enumerate(out.hidden_states):
+                    original=state[0].float().cpu().numpy()
+                    candidate=trace[index if index<24 else 25]
+                    difference=original-candidate
+                    layer_differences.append({"state":index,"label":"final_norm" if index==24 else f"input_to_layer_{index}",
+                        "max_abs":float(np.max(np.abs(difference))),"rmse":float(np.sqrt(np.mean(difference.astype(np.float64)**2))),
+                        "row_relative_max":float(np.max(np.abs(difference)/np.maximum(1,np.max(np.abs(original),axis=-1,keepdims=True))))})
+                print(json.dumps({"layer_trace":layer_differences}),flush=True)
             references[sample]=ref[-1]
             hidden_error=float(np.max(np.abs(h-native_hidden[sample]))); error=ref-base[sample]
             max_hidden_relative=max(max_hidden_relative,float(np.max(np.abs(h-native_hidden[sample])/
@@ -181,6 +195,7 @@ def main():
             "logits_rmse":math.sqrt(squared_error/logit_count),"top1_matches":top1_matches,
             "python":python_metrics,"native":native_metrics,"python_seconds":time.monotonic()-start}
     report["last_bpb_abs_difference"]=abs(python_metrics["last_bpb"]-native_metrics["last_bpb"])
+    if args.trace_layers:report["first_sample_layer_differences"]=layer_differences
     reduced=args.precision=="bf16" or args.reference_dtype!="fp32"
     # BF16 operand rounding and different pointwise/state dtypes do not satisfy
     # IEEE parity. Keep strict FP32 thresholds unchanged and report this as a
