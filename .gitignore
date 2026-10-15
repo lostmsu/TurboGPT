@@ -16,3 +16,44 @@ validation/.venv/
 .cache/
 .pytest_cache/
 *.egg-info/
+
+# Compiled code and debug files.
+*.obj
+*.o
+*.a
+*.lib
+*.exp
+*.exe
+*.dll
+*.so
+*.dylib
+*.pdb
+*.ilk
+*.fatbin
+
+# Model/data artifacts and numerical dumps.
+*.safetensors
+*.gguf
+*.ggml
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.f32
+*.f16
+*.bf16
+*.u64
+*.u32
+*.npy
+*.npz
+*.onnx
+
+# Runtime logs and profiler captures. Results, including summaries, stay in runs/.
+*.log
+events.out.tfevents.*
+*.nsys-rep
+*.ncu-rep
+*.ncu-repz
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

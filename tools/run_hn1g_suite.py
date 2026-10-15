@@ -44,6 +44,7 @@ def capture(args):
 def variant_header(baseline, context, sequential, steps, root):
     physical, effective, arena = GEOMETRY[context]
     values = {"Context": context, "Batch": physical, "EffectiveBatch": effective, "Steps": steps,
+              "LearningRate": "0.001f",
               "VramGiB": arena, "Evaluate": "false", "Sequential": str(sequential).lower(),
               "SequentialStarts": f'".cache/qwen-hn1g/seq-starts-{context}.u64"' if sequential else '""',
               "Assets": '".cache/qwen-hn1g/paths.txt"',

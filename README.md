@@ -14,8 +14,12 @@ The vision backbone is omitted. The TensorBoard writer, OneCycle schedule,
 Muon equations and mantissa-preserving AdamW representation come from the original
 CUDA C++ TurboGPT codebase. The previous Rust experiment is preserved in `src/`
 and [README-turbogpt.md](README-turbogpt.md), with `build-rust.ps1` as its build
-entry point. The superseded PyTorch port is kept locally in the ignored
-`.cache/pytorch-reference/` directory for comparison.
+entry point. The superseded PyTorch port is preserved in
+`validation/pytorch-reference/` for comparison, with its own dependency lockfile
+and tests. It is independent of the native trainer and root Python environment.
+The original position-loss and paired-evaluation analysis helpers are preserved
+in `tools/native-position-audit/`; their generated files remain under `.cache/`
+and `runs/`. These directories, including result summaries, remain untracked.
 
 ## Prepare the assets
 

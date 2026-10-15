@@ -1,0 +1,40 @@
+[project]
+name = "qwen-tuning"
+version = "0.1.0"
+description = "Memory-bounded Qwen3.5 LoRA continued pretraining on hn1g"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "torch==2.14.1",
+    "transformers==5.19.0",
+    "peft==0.21.2",
+    "accelerate==1.15.0",
+    "huggingface-hub==1.33.0",
+    "numpy==2.5.3",
+]
+
+[project.optional-dependencies]
+qlora = ["bitsandbytes==0.50.2"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
+
+[project.scripts]
+qwen-tune = "qwen_tuning.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["qwen_tuning*"]
+
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cuda" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests/test_qwen_data.py", "tests/test_qwen_loss.py"]
